@@ -1,4 +1,3 @@
-import { KeyValuePair } from '../types';
 
 const fileToBase64 = (file: File): Promise<string> => {
     return new Promise<string>((resolve, reject) => {
@@ -9,7 +8,7 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-export const extractDataFromFiles = async (file: File): Promise<KeyValuePair[]> => {
+export const extractDataFromFiles = async (file: File): Promise<Record<string, string>[]> => {
     const base64Image = await fileToBase64(file);
 
     const response = await fetch('/api/extract', {
@@ -34,6 +33,6 @@ export const extractDataFromFiles = async (file: File): Promise<KeyValuePair[]> 
         throw new Error(errorMessage);
     }
 
-    const data: KeyValuePair[] = await response.json();
+    const data: Record<string, string>[] = await response.json();
     return data;
 };

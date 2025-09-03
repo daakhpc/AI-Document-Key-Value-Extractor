@@ -6,14 +6,12 @@ import FileUpload from './components/FileUpload';
 import FileProgressList from './components/FileProgressList';
 import KeySelector from './components/KeySelector';
 import DataTable from './components/DataTable';
-import TableConfiguration from './components/TableConfiguration';
 
 const App: React.FC = () => {
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-    const [keyGroups, setKeyGroups] = useState<Map<string, string[]>>(new Map()); // Key: display key "Name/नाम", Value: ["Name", "नाम"]
-    const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set());
-    const [displayedKeys, setDisplayedKeys] = useState<string[]>([]);
-    const [isTableVisible, setIsTableVisible] = useState<boolean>(false);
+    const [keyGroups, setKeyGroups] = useState<Map<string, string[]>>(new Map());
+    const [orderedDisplayKeys, setOrderedDisplayKeys] = useState<string[]>([]);
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
     const [isProcessing, setIsProcessing] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -26,12 +24,15 @@ const App: React.FC = () => {
             error: null,
         }));
         setUploadedFiles(prevFiles => [...prevFiles, ...newFiles]);
-        setIsTableVisible(false);
+        setKeyGroups(new Map());
+        setOrderedDisplayKeys([]);
+        setSelectedKeys(new Set());
     }, []);
 
     const processFiles = useCallback(async () => {
         const filesToProcess = uploadedFiles.filter(f => f.status === 'pending');
         if (filesToProcess.length === 0) {
+            setIsProcessing(false);
             return;
         }
 
@@ -60,41 +61,41 @@ const App: React.FC = () => {
         }
     }, [uploadedFiles, processFiles]);
 
-    // Effect to group keys after all processing is finished
     useEffect(() => {
-        // Only run when not processing AND there are no files pending.
-        // This ensures we analyze keys only once after a full batch is complete.
         if (isProcessing || uploadedFiles.some(f => f.status === 'pending')) return;
 
         const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.data);
         if (completedFiles.length === 0) {
-            // If no files completed successfully after a run, clear any old keys.
-            if (uploadedFiles.length > 0 && keyGroups.size > 0) {
+             if (uploadedFiles.length > 0) { // If files were processed but all failed
                 setKeyGroups(new Map());
-                setCheckedKeys(new Set());
-                setIsTableVisible(false);
+                setOrderedDisplayKeys([]);
+                setSelectedKeys(new Set());
             }
             return;
         }
 
-        // 1. Collect all values for each unique, trimmed original key
         const keyToValues = new Map<string, Set<string>>();
+        const discoveryOrder: string[] = [];
         completedFiles.forEach(file => {
-            file.data?.forEach(pair => {
-                const key = pair.key.trim();
-                if (!key) return;
-                if (!keyToValues.has(key)) {
-                    keyToValues.set(key, new Set());
+            file.data?.forEach(rowObject => {
+                 for (const key in rowObject) {
+                    if (Object.prototype.hasOwnProperty.call(rowObject, key)) {
+                        const trimmedKey = key.trim();
+                        if (!trimmedKey) continue;
+
+                        if (!keyToValues.has(trimmedKey)) {
+                            keyToValues.set(trimmedKey, new Set());
+                            discoveryOrder.push(trimmedKey);
+                        }
+                        keyToValues.get(trimmedKey)!.add(rowObject[key]);
+                    }
                 }
-                keyToValues.get(key)!.add(pair.value);
             });
         });
 
-        // 2. Group original keys by their exact set of values
         const valueSetHashToKeys = new Map<string, string[]>();
         for (const [key, valueSet] of keyToValues.entries()) {
             if (valueSet.size === 0) continue;
-            // Create a consistent hash from the set of values to find identical sets
             const hash = JSON.stringify(Array.from(valueSet).sort());
             if (!valueSetHashToKeys.has(hash)) {
                 valueSetHashToKeys.set(hash, []);
@@ -102,25 +103,37 @@ const App: React.FC = () => {
             valueSetHashToKeys.get(hash)!.push(key);
         }
 
-        // 3. Create the final display key groups
         const newKeyGroups = new Map<string, string[]>();
-        for (const originalKeys of valueSetHashToKeys.values()) {
-            originalKeys.sort(); // Sort for consistent display, e.g., "Name/नाम" not "नाम/Name"
-            const displayKey = originalKeys.join('/');
-            newKeyGroups.set(displayKey, originalKeys);
+        const newOrderedDisplayKeys: string[] = [];
+        const processedOriginalKeys = new Set<string>();
+
+        for (const originalKey of discoveryOrder) {
+            if (processedOriginalKeys.has(originalKey)) continue;
+
+            let foundGroup: string[] | undefined;
+            for (const group of valueSetHashToKeys.values()) {
+                if (group.includes(originalKey)) {
+                    foundGroup = group;
+                    break;
+                }
+            }
+            
+            if (foundGroup) {
+                foundGroup.sort();
+                const displayKey = foundGroup.join('/');
+                newKeyGroups.set(displayKey, foundGroup);
+                newOrderedDisplayKeys.push(displayKey);
+                foundGroup.forEach(k => processedOriginalKeys.add(k));
+            }
         }
 
         setKeyGroups(newKeyGroups);
-        // Auto-select all newly found keys
-        setCheckedKeys(new Set(newKeyGroups.keys()));
-        setIsTableVisible(false);
-
+        setOrderedDisplayKeys(newOrderedDisplayKeys);
+        setSelectedKeys(new Set(newOrderedDisplayKeys));
     }, [isProcessing, uploadedFiles]);
 
-
     const handleKeySelectionChange = (key: string) => {
-        setIsTableVisible(false);
-        setCheckedKeys(prev => {
+        setSelectedKeys(prev => {
             const newSelection = new Set(prev);
             if (newSelection.has(key)) {
                 newSelection.delete(key);
@@ -130,26 +143,8 @@ const App: React.FC = () => {
             return newSelection;
         });
     };
-
-    const handleSelectAllKeys = () => {
-        setIsTableVisible(false);
-        setCheckedKeys(new Set(Array.from(keyGroups.keys())));
-    };
-
-    const handleDeselectAllKeys = () => {
-        setIsTableVisible(false);
-        setCheckedKeys(new Set());
-    };
-
-
-
-    const handleCreateTable = (orderedKeys: string[]) => {
-        setDisplayedKeys(orderedKeys);
-        setIsTableVisible(true);
-    };
     
     const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.data);
-    const allDisplayKeys = Array.from(keyGroups.keys());
     const hasPendingFiles = uploadedFiles.some(f => f.status === 'pending');
 
     return (
@@ -160,7 +155,7 @@ const App: React.FC = () => {
                         📄 AI Document Key-Value Extractor
                     </h1>
                     <p className="mt-1 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-                        Upload documents, select data, reorder columns, and export your results.
+                        Upload documents to automatically extract structured data into a table.
                     </p>
                 </div>
             </header>
@@ -180,22 +175,8 @@ const App: React.FC = () => {
                         )}
                         {keyGroups.size > 0 && !isProcessing && !hasPendingFiles ? (
                             <>
-                                <KeySelector 
-                                    allKeys={allDisplayKeys} 
-                                    checkedKeys={checkedKeys} 
-                                    onKeySelectionChange={handleKeySelectionChange}
-                                    onSelectAll={handleSelectAllKeys}
-                                    onDeselectAll={handleDeselectAllKeys}
-                                />
-                                {checkedKeys.size > 0 && (
-                                    <TableConfiguration 
-                                        keys={Array.from(checkedKeys).sort((a,b) => allDisplayKeys.indexOf(a) - allDisplayKeys.indexOf(b))} 
-                                        onCreateTable={handleCreateTable} 
-                                    />
-                                )}
-                                {isTableVisible && (
-                                    <DataTable files={completedFiles} displayedKeys={displayedKeys} keyGroups={keyGroups} />
-                                )}
+                                <KeySelector allKeys={orderedDisplayKeys} selectedKeys={selectedKeys} onKeySelectionChange={handleKeySelectionChange} />
+                                <DataTable files={completedFiles} selectedKeys={selectedKeys} keyGroups={keyGroups} />
                             </>
                         ) : isProcessing || hasPendingFiles ? (
                              <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md flex flex-col items-center justify-center text-center h-96">

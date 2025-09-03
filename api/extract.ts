@@ -1,6 +1,6 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 export default async function handler(
   req: VercelRequest,
@@ -27,13 +27,29 @@ export default async function handler(
         const ai = new GoogleGenAI({ apiKey: API_KEY });
 
         const prompt = `
-            You are an expert data extraction AI.
-            Analyze the provided document (image or PDF) and extract all distinct key-value pairs.
-            For example, if you see "Invoice Number: INV-123", you should extract { "key": "Invoice Number", "value": "INV-123" }.
-            Do not create keys that are generic like 'Address Line 1'. Instead, use the label if present, e.g., 'Shipping Address'.
-            Consolidate multi-line values into a single string.
-            Return the result as a JSON array of objects, where each object has a "key" and a "value" property.
-            If the document is not a form or does not contain clear key-value pairs, return an empty array.
+            You are an expert data extraction AI. Your task is to extract structured data from the provided document.
+            The document may contain both document-level fields (e.g., "Invoice Number", "Date") and tabular data (e.g., a list of line items).
+            Your goal is to return a JSON array of objects, where each object represents a single row of data.
+
+            - If the document contains a table, each row of that table should become one object in the output array.
+            - Any document-level fields that apply to the entire document should be included in *every* object in the array.
+            - If the document is a simple form without a table, return a JSON array containing a *single object* with all the extracted key-value pairs.
+            - The keys in the JSON objects should be the labels found in the document.
+            - Consolidate multi-line values into a single string with spaces.
+            - If the document does not contain clear key-value pairs or tabular data, return an empty array.
+
+            For example, for an invoice with two line items, the output should look like this:
+            [
+              { "Invoice Number": "123", "Date": "2024-01-01", "Description": "Product A", "Quantity": "2", "Price": "10.00" },
+              { "Invoice Number": "123", "Date": "2024-01-01", "Description": "Product B", "Quantity": "1", "Price": "20.00" }
+            ]
+
+            If the document is a business card, the output should be:
+            [
+              { "Name": "John Doe", "Title": "Software Engineer", "Phone": "555-1234" }
+            ]
+
+            Return ONLY the JSON array. Do not return any other text, explanations, or markdown formatting.
         `;
 
         const imagePart = {
@@ -50,29 +66,12 @@ export default async function handler(
             },
             config: {
                 responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            key: {
-                                type: Type.STRING,
-                                description: 'The label or key for the data point.'
-                            },
-                            value: {
-                                type: Type.STRING,
-                                description: 'The corresponding value for the key.'
-                            }
-                        },
-                        required: ["key", "value"]
-                    }
-                }
             }
         });
         
         const jsonText = geminiResponse.text.trim();
         if (!jsonText) {
-            return res.status(500).json({ error: "The model returned an empty response. The document might not contain extractable key-value pairs." });
+            return res.status(200).json([]); // Return empty array if model returns nothing
         }
         
         const parsedData = JSON.parse(jsonText);
@@ -81,12 +80,24 @@ export default async function handler(
             return res.status(500).json({ error: "Invalid data format received from AI. Expected an array." });
         }
 
-        const isValid = parsedData.every((item: any) => typeof item.key === 'string' && typeof item.value === 'string');
+        const isValid = parsedData.every((item: any) => typeof item === 'object' && item !== null && !Array.isArray(item));
         if (!isValid) {
-            return res.status(500).json({ error: "Invalid item format in data received from AI." });
+            return res.status(500).json({ error: "Invalid item format in data received from AI. Expected an array of objects." });
         }
+        
+        // Ensure all values are strings
+        const dataWithStrings = parsedData.map((row: any) => {
+            const newRow: Record<string, string> = {};
+            for (const key in row) {
+                if (Object.prototype.hasOwnProperty.call(row, key)) {
+                    newRow[key] = String(row[key]);
+                }
+            }
+            return newRow;
+        });
 
-        return res.status(200).json(parsedData);
+
+        return res.status(200).json(dataWithStrings);
 
     } catch (e: any) {
         console.error("Gemini API call failed", e);
