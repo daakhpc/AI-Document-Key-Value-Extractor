@@ -5,23 +5,10 @@ import { UploadedFile } from '../types';
 interface DataTableProps {
     files: UploadedFile[];
     displayedKeys: string[];
+    keyGroups: Map<string, string[]>;
 }
 
-const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
-
-    const getDataMapForFile = (file: UploadedFile): Map<string, string> => {
-        const dataMap = new Map<string, string>();
-        file.data?.forEach(item => {
-            const key = item.key?.trim();
-            if (key) {
-                const normalizedKey = key.toLowerCase();
-                if (!dataMap.has(normalizedKey)) {
-                    dataMap.set(normalizedKey, item.value);
-                }
-            }
-        });
-        return dataMap;
-    };
+const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys, keyGroups }) => {
 
     const escapeCsvCell = (cellData: string) => {
         const stringValue = String(cellData || '');
@@ -30,14 +17,25 @@ const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
         }
         return stringValue;
     };
+    
+    const findValueForDisplayKey = (dataMap: Map<string, string>, displayKey: string): string => {
+        const originalKeys = keyGroups.get(displayKey) || [displayKey];
+        for (const key of originalKeys) {
+            if (dataMap.has(key)) {
+                return dataMap.get(key) || 'N/A';
+            }
+        }
+        return 'N/A';
+    }
 
     const exportToCSV = () => {
         const headers = ['Document', ...displayedKeys];
         const csvRows = [headers.map(escapeCsvCell).join(',')];
 
         files.forEach(file => {
-            const dataMap = getDataMapForFile(file);
-            const row = [file.file.name, ...displayedKeys.map(key => dataMap.get(key.trim().toLowerCase()) || 'N/A')];
+            const dataMap = new Map(file.data?.map(item => [item.key.trim(), item.value]));
+            const rowData = displayedKeys.map(displayKey => findValueForDisplayKey(dataMap, displayKey));
+            const row = [file.file.name, ...rowData];
             csvRows.push(row.map(escapeCsvCell).join(','));
         });
 
@@ -53,7 +51,7 @@ const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
     };
 
     if (files.length === 0 || displayedKeys.length === 0) {
-        return null; // The parent component now controls the visibility and initial state message.
+        return null; 
     }
     
     return (
@@ -83,15 +81,15 @@ const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {files.map(file => {
-                            const dataMap = getDataMapForFile(file);
+                            const dataMap = new Map(file.data?.map(item => [item.key.trim(), item.value]));
                             return (
                                 <tr key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-inherit z-10">
                                         <div className="truncate max-w-xs" title={file.file.name}>{file.file.name}</div>
                                     </td>
-                                    {displayedKeys.map(key => (
-                                        <td key={key} className="px-6 py-4 whitespace-normal text-sm text-gray-600 dark:text-gray-300">
-                                            {dataMap.get(key.trim().toLowerCase()) || 'N/A'}
+                                    {displayedKeys.map(displayKey => (
+                                        <td key={displayKey} className="px-6 py-4 whitespace-normal text-sm text-gray-600 dark:text-gray-300">
+                                            {findValueForDisplayKey(dataMap, displayKey)}
                                         </td>
                                     ))}
                                 </tr>

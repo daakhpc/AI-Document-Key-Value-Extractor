@@ -10,7 +10,7 @@ import TableConfiguration from './components/TableConfiguration';
 
 const App: React.FC = () => {
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-    const [allKeys, setAllKeys] = useState<Map<string, string>>(new Map()); // <normalized key, original key>
+    const [keyGroups, setKeyGroups] = useState<Map<string, string[]>>(new Map()); // Key: display key "Name/नाम", Value: ["Name", "नाम"]
     const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set());
     const [displayedKeys, setDisplayedKeys] = useState<string[]>([]);
     const [isTableVisible, setIsTableVisible] = useState<boolean>(false);
@@ -26,12 +26,12 @@ const App: React.FC = () => {
             error: null,
         }));
         setUploadedFiles(prevFiles => [...prevFiles, ...newFiles]);
+        setIsTableVisible(false);
     }, []);
 
     const processFiles = useCallback(async () => {
         const filesToProcess = uploadedFiles.filter(f => f.status === 'pending');
         if (filesToProcess.length === 0) {
-            setIsProcessing(false);
             return;
         }
 
@@ -43,28 +43,6 @@ const App: React.FC = () => {
             try {
                 const data = await extractDataFromFiles(fileToProcess.file);
                 setUploadedFiles(prev => prev.map(f => f.id === fileToProcess.id ? { ...f, status: 'completed', data } : f));
-                
-                setAllKeys(prevKeys => {
-                    const updatedKeys = new Map(prevKeys);
-                    const newOriginalKeys = new Set<string>();
-
-                    data.forEach(item => {
-                        const originalKey = item.key.trim();
-                        if (!originalKey) return; // Skip empty keys
-                        const normalizedKey = originalKey.toLowerCase();
-                        if (!updatedKeys.has(normalizedKey)) {
-                            updatedKeys.set(normalizedKey, originalKey);
-                            newOriginalKeys.add(originalKey);
-                        }
-                    });
-                    
-                    // Auto-select new keys
-                    if (newOriginalKeys.size > 0) {
-                        setCheckedKeys(prevChecked => new Set([...prevChecked, ...newOriginalKeys]));
-                    }
-
-                    return updatedKeys;
-                });
             } catch (err: any) {
                 console.error("Error processing file:", err);
                 const errorMessage = err.message || 'An unknown error occurred during processing.';
@@ -82,6 +60,54 @@ const App: React.FC = () => {
         }
     }, [uploadedFiles, processFiles]);
 
+    // Effect to group keys after processing is finished
+    useEffect(() => {
+        if (isProcessing) return;
+
+        const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.data);
+        if (completedFiles.length === 0) return;
+
+        // 1. Collect all values for each unique, trimmed original key
+        const keyToValues = new Map<string, Set<string>>();
+        completedFiles.forEach(file => {
+            file.data?.forEach(pair => {
+                const key = pair.key.trim();
+                if (!key) return;
+                if (!keyToValues.has(key)) {
+                    keyToValues.set(key, new Set());
+                }
+                keyToValues.get(key)!.add(pair.value);
+            });
+        });
+
+        // 2. Group original keys by their exact set of values
+        const valueSetHashToKeys = new Map<string, string[]>();
+        for (const [key, valueSet] of keyToValues.entries()) {
+            if (valueSet.size === 0) continue;
+            // Create a consistent hash from the set of values to find identical sets
+            const hash = JSON.stringify(Array.from(valueSet).sort());
+            if (!valueSetHashToKeys.has(hash)) {
+                valueSetHashToKeys.set(hash, []);
+            }
+            valueSetHashToKeys.get(hash)!.push(key);
+        }
+
+        // 3. Create the final display key groups
+        const newKeyGroups = new Map<string, string[]>();
+        for (const originalKeys of valueSetHashToKeys.values()) {
+            originalKeys.sort(); // Sort for consistent display, e.g., "Name/नाम" not "नाम/Name"
+            const displayKey = originalKeys.join('/');
+            newKeyGroups.set(displayKey, originalKeys);
+        }
+
+        setKeyGroups(newKeyGroups);
+        // Auto-select all newly found keys
+        setCheckedKeys(new Set(newKeyGroups.keys()));
+        setIsTableVisible(false);
+
+    }, [isProcessing, uploadedFiles]);
+
+
     const handleKeySelectionChange = (key: string) => {
         setIsTableVisible(false);
         setCheckedKeys(prev => {
@@ -97,7 +123,7 @@ const App: React.FC = () => {
 
     const handleSelectAllKeys = () => {
         setIsTableVisible(false);
-        setCheckedKeys(new Set(Array.from(allKeys.values())));
+        setCheckedKeys(new Set(Array.from(keyGroups.keys())));
     };
 
     const handleDeselectAllKeys = () => {
@@ -105,12 +131,15 @@ const App: React.FC = () => {
         setCheckedKeys(new Set());
     };
 
+
+
     const handleCreateTable = (orderedKeys: string[]) => {
         setDisplayedKeys(orderedKeys);
         setIsTableVisible(true);
     };
     
     const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.data);
+    const allDisplayKeys = Array.from(keyGroups.keys());
 
     return (
         <div className="min-h-screen text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 font-sans">
@@ -141,7 +170,7 @@ const App: React.FC = () => {
                         {completedFiles.length > 0 ? (
                             <>
                                 <KeySelector 
-                                    allKeys={Array.from(allKeys.values())} 
+                                    allKeys={allDisplayKeys} 
                                     checkedKeys={checkedKeys} 
                                     onKeySelectionChange={handleKeySelectionChange}
                                     onSelectAll={handleSelectAllKeys}
@@ -149,12 +178,12 @@ const App: React.FC = () => {
                                 />
                                 {checkedKeys.size > 0 && (
                                     <TableConfiguration 
-                                        keys={Array.from(checkedKeys).sort()} 
+                                        keys={Array.from(checkedKeys).sort((a,b) => allDisplayKeys.indexOf(a) - allDisplayKeys.indexOf(b))} 
                                         onCreateTable={handleCreateTable} 
                                     />
                                 )}
                                 {isTableVisible && (
-                                    <DataTable files={completedFiles} displayedKeys={displayedKeys} />
+                                    <DataTable files={completedFiles} displayedKeys={displayedKeys} keyGroups={keyGroups} />
                                 )}
                             </>
                         ) : isProcessing ? (
