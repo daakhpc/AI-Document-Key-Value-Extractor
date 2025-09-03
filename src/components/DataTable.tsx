@@ -72,7 +72,7 @@ const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
                             const dataMap = new Map(file.data?.map(item => [item.key, item.value]));
                             return (
                                 <tr key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50 z-10">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-inherit z-10">
                                         <div className="truncate max-w-xs" title={file.file.name}>{file.file.name}</div>
                                     </td>
                                     {displayedKeys.map(key => (
