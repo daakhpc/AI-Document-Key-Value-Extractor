@@ -60,12 +60,22 @@ const App: React.FC = () => {
         }
     }, [uploadedFiles, processFiles]);
 
-    // Effect to group keys after processing is finished
+    // Effect to group keys after all processing is finished
     useEffect(() => {
-        if (isProcessing) return;
+        // Only run when not processing AND there are no files pending.
+        // This ensures we analyze keys only once after a full batch is complete.
+        if (isProcessing || uploadedFiles.some(f => f.status === 'pending')) return;
 
         const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.data);
-        if (completedFiles.length === 0) return;
+        if (completedFiles.length === 0) {
+            // If no files completed successfully after a run, clear any old keys.
+            if (uploadedFiles.length > 0 && keyGroups.size > 0) {
+                setKeyGroups(new Map());
+                setCheckedKeys(new Set());
+                setIsTableVisible(false);
+            }
+            return;
+        }
 
         // 1. Collect all values for each unique, trimmed original key
         const keyToValues = new Map<string, Set<string>>();
@@ -140,6 +150,7 @@ const App: React.FC = () => {
     
     const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.data);
     const allDisplayKeys = Array.from(keyGroups.keys());
+    const hasPendingFiles = uploadedFiles.some(f => f.status === 'pending');
 
     return (
         <div className="min-h-screen text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-900 font-sans">
@@ -157,7 +168,7 @@ const App: React.FC = () => {
             <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-1 space-y-6">
-                        <FileUpload onFilesUpload={handleFilesUpload} isProcessing={isProcessing} />
+                        <FileUpload onFilesUpload={handleFilesUpload} isProcessing={isProcessing || hasPendingFiles} />
                         <FileProgressList files={uploadedFiles} />
                     </div>
                     <div className="lg:col-span-2 space-y-6">
@@ -167,7 +178,7 @@ const App: React.FC = () => {
                                 <p>{error}</p>
                             </div>
                         )}
-                        {completedFiles.length > 0 ? (
+                        {keyGroups.size > 0 && !isProcessing && !hasPendingFiles ? (
                             <>
                                 <KeySelector 
                                     allKeys={allDisplayKeys} 
@@ -186,7 +197,7 @@ const App: React.FC = () => {
                                     <DataTable files={completedFiles} displayedKeys={displayedKeys} keyGroups={keyGroups} />
                                 )}
                             </>
-                        ) : isProcessing ? (
+                        ) : isProcessing || hasPendingFiles ? (
                              <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md flex flex-col items-center justify-center text-center h-96">
                                 <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
                                 <p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-300">Processing documents...</p>
