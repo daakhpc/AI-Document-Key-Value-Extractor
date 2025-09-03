@@ -1,15 +1,19 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
-import { UploadedFile, KeyValuePair } from './types';
+import { UploadedFile } from './types';
 import { extractDataFromFiles } from './services/geminiService';
 import FileUpload from './components/FileUpload';
 import FileProgressList from './components/FileProgressList';
 import KeySelector from './components/KeySelector';
 import DataTable from './components/DataTable';
+import TableConfiguration from './components/TableConfiguration';
 
 const App: React.FC = () => {
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
     const [allKeys, setAllKeys] = useState<Set<string>>(new Set());
-    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+    const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set());
+    const [displayedKeys, setDisplayedKeys] = useState<string[]>([]);
+    const [isTableVisible, setIsTableVisible] = useState<boolean>(false);
     const [isProcessing, setIsProcessing] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +49,7 @@ const App: React.FC = () => {
                 
                 setAllKeys(prevKeys => {
                     const updatedKeys = new Set([...Array.from(prevKeys), ...Array.from(newKeys)]);
-                    setSelectedKeys(new Set(updatedKeys)); // Auto-select new keys
+                    setCheckedKeys(new Set(updatedKeys)); // Auto-select new keys
                     return updatedKeys;
                 });
             } catch (err: any) {
@@ -66,7 +70,8 @@ const App: React.FC = () => {
     }, [uploadedFiles, processFiles]);
 
     const handleKeySelectionChange = (key: string) => {
-        setSelectedKeys(prev => {
+        setIsTableVisible(false);
+        setCheckedKeys(prev => {
             const newSelection = new Set(prev);
             if (newSelection.has(key)) {
                 newSelection.delete(key);
@@ -75,6 +80,21 @@ const App: React.FC = () => {
             }
             return newSelection;
         });
+    };
+
+    const handleSelectAllKeys = () => {
+        setIsTableVisible(false);
+        setCheckedKeys(new Set(allKeys));
+    };
+
+    const handleDeselectAllKeys = () => {
+        setIsTableVisible(false);
+        setCheckedKeys(new Set());
+    };
+
+    const handleCreateTable = (orderedKeys: string[]) => {
+        setDisplayedKeys(orderedKeys);
+        setIsTableVisible(true);
     };
     
     const completedFiles = uploadedFiles.filter(f => f.status === 'completed' && f.data);
@@ -87,7 +107,7 @@ const App: React.FC = () => {
                         📄 AI Document Key-Value Extractor
                     </h1>
                     <p className="mt-1 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-                        Upload documents to automatically extract structured data into a table.
+                        Upload documents, select data, reorder columns, and export your results.
                     </p>
                 </div>
             </header>
@@ -105,20 +125,32 @@ const App: React.FC = () => {
                                 <p>{error}</p>
                             </div>
                         )}
-                        {completedFiles.length > 0 && (
+                        {completedFiles.length > 0 ? (
                             <>
-                                <KeySelector allKeys={allKeys} selectedKeys={selectedKeys} onKeySelectionChange={handleKeySelectionChange} />
-                                <DataTable files={completedFiles} selectedKeys={selectedKeys} />
+                                <KeySelector 
+                                    allKeys={allKeys} 
+                                    checkedKeys={checkedKeys} 
+                                    onKeySelectionChange={handleKeySelectionChange}
+                                    onSelectAll={handleSelectAllKeys}
+                                    onDeselectAll={handleDeselectAllKeys}
+                                />
+                                {checkedKeys.size > 0 && (
+                                    <TableConfiguration 
+                                        keys={Array.from(checkedKeys).sort()} 
+                                        onCreateTable={handleCreateTable} 
+                                    />
+                                )}
+                                {isTableVisible && (
+                                    <DataTable files={completedFiles} displayedKeys={displayedKeys} />
+                                )}
                             </>
-                        )}
-                        {isProcessing && completedFiles.length === 0 && (
+                        ) : isProcessing ? (
                              <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md flex flex-col items-center justify-center text-center h-96">
                                 <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-indigo-500"></div>
                                 <p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-300">Processing documents...</p>
                                 <p className="text-gray-500 dark:text-gray-400">AI is extracting key-value pairs. Please wait.</p>
                             </div>
-                        )}
-                        {!isProcessing && uploadedFiles.length === 0 && (
+                        ) : (
                              <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md flex flex-col items-center justify-center text-center h-96">
                                 <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                                 <p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-300">Awaiting Documents</p>

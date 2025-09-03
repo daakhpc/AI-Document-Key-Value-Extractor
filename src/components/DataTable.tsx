@@ -1,34 +1,66 @@
+
 import React from 'react';
 import { UploadedFile } from '../types';
 
 interface DataTableProps {
     files: UploadedFile[];
-    selectedKeys: Set<string>;
+    displayedKeys: string[];
 }
 
-const DataTable: React.FC<DataTableProps> = ({ files, selectedKeys }) => {
-    const sortedKeys = Array.from(selectedKeys).sort();
+const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
 
-    if (files.length === 0 || sortedKeys.length === 0) {
-        return (
-             <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md flex flex-col items-center justify-center text-center">
-                <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                <p className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-300">No Data to Display</p>
-                <p className="text-gray-500 dark:text-gray-400">Select one or more keys from the panel above to view the extracted data.</p>
-            </div>
-        );
+    const escapeCsvCell = (cellData: string) => {
+        const stringValue = String(cellData || '');
+        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+            return `"${stringValue.replace(/"/g, '""')}"`;
+        }
+        return stringValue;
+    };
+
+    const exportToCSV = () => {
+        const headers = ['Document', ...displayedKeys];
+        const csvRows = [headers.map(escapeCsvCell).join(',')];
+
+        files.forEach(file => {
+            const dataMap = new Map(file.data?.map(item => [item.key, item.value]));
+            const row = [file.file.name, ...displayedKeys.map(key => dataMap.get(key) || 'N/A')];
+            csvRows.push(row.map(escapeCsvCell).join(','));
+        });
+
+        const csvString = csvRows.join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'extracted_data.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    if (files.length === 0 || displayedKeys.length === 0) {
+        return null; // The parent component now controls the visibility and initial state message.
     }
     
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-700">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Extracted Data</h2>
+                <button
+                    onClick={exportToCSV}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                    Export as CSV
+                </button>
+            </div>
+            <div className="max-h-[60vh] overflow-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 relative border-collapse">
+                    <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-20">
                         <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider sticky left-0 bg-gray-50 dark:bg-gray-700 z-10">
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider sticky left-0 bg-gray-50 dark:bg-gray-700 z-30">
                                 Document
                             </th>
-                            {sortedKeys.map(key => (
+                            {displayedKeys.map(key => (
                                 <th key={key} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                     {key}
                                 </th>
@@ -40,10 +72,10 @@ const DataTable: React.FC<DataTableProps> = ({ files, selectedKeys }) => {
                             const dataMap = new Map(file.data?.map(item => [item.key, item.value]));
                             return (
                                 <tr key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                        <div className="truncate w-40" title={file.file.name}>{file.file.name}</div>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50 z-10">
+                                        <div className="truncate max-w-xs" title={file.file.name}>{file.file.name}</div>
                                     </td>
-                                    {sortedKeys.map(key => (
+                                    {displayedKeys.map(key => (
                                         <td key={key} className="px-6 py-4 whitespace-normal text-sm text-gray-600 dark:text-gray-300">
                                             {dataMap.get(key) || 'N/A'}
                                         </td>
