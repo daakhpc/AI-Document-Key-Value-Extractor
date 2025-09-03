@@ -40,7 +40,8 @@ const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys, keyGroups }
         });
 
         const csvString = csvRows.join('\n');
-        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        // Prepend the UTF-8 Byte Order Mark (BOM) to ensure Excel displays special characters correctly.
+        const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
