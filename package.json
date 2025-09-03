@@ -1,0 +1,22 @@
+
+{
+  "name": "ai-document-key-value-extractor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An application to extract key-value pairs from documents using AI, ready for Vercel deployment.",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@google/genai": "^1.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@vercel/node": "^3.2.3",
+    "typescript": "^5.5.3",
+    "vercel": "^35.2.1"
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}

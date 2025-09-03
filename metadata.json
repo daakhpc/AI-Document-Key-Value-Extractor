@@ -1,0 +1,5 @@
+{
+  "name": "AI Document Key-Value Extractor",
+  "description": "Upload multiple PDF or image documents, and this application will use AI to extract key-value pairs. You can then select which data points to view and display them in an organized table.",
+  "requestFramePermissions": []
+}
