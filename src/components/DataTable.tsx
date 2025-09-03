@@ -9,6 +9,20 @@ interface DataTableProps {
 
 const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
 
+    const getDataMapForFile = (file: UploadedFile): Map<string, string> => {
+        const dataMap = new Map<string, string>();
+        file.data?.forEach(item => {
+            const key = item.key?.trim();
+            if (key) {
+                const normalizedKey = key.toLowerCase();
+                if (!dataMap.has(normalizedKey)) {
+                    dataMap.set(normalizedKey, item.value);
+                }
+            }
+        });
+        return dataMap;
+    };
+
     const escapeCsvCell = (cellData: string) => {
         const stringValue = String(cellData || '');
         if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
@@ -22,8 +36,8 @@ const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
         const csvRows = [headers.map(escapeCsvCell).join(',')];
 
         files.forEach(file => {
-            const dataMap = new Map(file.data?.map(item => [item.key, item.value]));
-            const row = [file.file.name, ...displayedKeys.map(key => dataMap.get(key) || 'N/A')];
+            const dataMap = getDataMapForFile(file);
+            const row = [file.file.name, ...displayedKeys.map(key => dataMap.get(key.trim().toLowerCase()) || 'N/A')];
             csvRows.push(row.map(escapeCsvCell).join(','));
         });
 
@@ -69,7 +83,7 @@ const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {files.map(file => {
-                            const dataMap = new Map(file.data?.map(item => [item.key, item.value]));
+                            const dataMap = getDataMapForFile(file);
                             return (
                                 <tr key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-inherit z-10">
@@ -77,7 +91,7 @@ const DataTable: React.FC<DataTableProps> = ({ files, displayedKeys }) => {
                                     </td>
                                     {displayedKeys.map(key => (
                                         <td key={key} className="px-6 py-4 whitespace-normal text-sm text-gray-600 dark:text-gray-300">
-                                            {dataMap.get(key) || 'N/A'}
+                                            {dataMap.get(key.trim().toLowerCase()) || 'N/A'}
                                         </td>
                                     ))}
                                 </tr>

@@ -2,7 +2,7 @@
 import React from 'react';
 
 interface KeySelectorProps {
-    allKeys: Set<string>;
+    allKeys: string[];
     checkedKeys: Set<string>;
     onKeySelectionChange: (key: string) => void;
     onSelectAll: () => void;
@@ -10,7 +10,7 @@ interface KeySelectorProps {
 }
 
 const KeySelector: React.FC<KeySelectorProps> = ({ allKeys, checkedKeys, onKeySelectionChange, onSelectAll, onDeselectAll }) => {
-    const sortedKeys = Array.from(allKeys).sort();
+    const sortedKeys = [...allKeys].sort();
 
     if (sortedKeys.length === 0) {
         return null;

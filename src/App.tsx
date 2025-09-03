@@ -10,7 +10,7 @@ import TableConfiguration from './components/TableConfiguration';
 
 const App: React.FC = () => {
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-    const [allKeys, setAllKeys] = useState<Set<string>>(new Set());
+    const [allKeys, setAllKeys] = useState<Map<string, string>>(new Map()); // <normalized key, original key>
     const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set());
     const [displayedKeys, setDisplayedKeys] = useState<string[]>([]);
     const [isTableVisible, setIsTableVisible] = useState<boolean>(false);
@@ -44,12 +44,25 @@ const App: React.FC = () => {
                 const data = await extractDataFromFiles(fileToProcess.file);
                 setUploadedFiles(prev => prev.map(f => f.id === fileToProcess.id ? { ...f, status: 'completed', data } : f));
                 
-                const newKeys = new Set<string>();
-                data.forEach(item => newKeys.add(item.key));
-                
                 setAllKeys(prevKeys => {
-                    const updatedKeys = new Set([...Array.from(prevKeys), ...Array.from(newKeys)]);
-                    setCheckedKeys(new Set(updatedKeys)); // Auto-select new keys
+                    const updatedKeys = new Map(prevKeys);
+                    const newOriginalKeys = new Set<string>();
+
+                    data.forEach(item => {
+                        const originalKey = item.key.trim();
+                        if (!originalKey) return; // Skip empty keys
+                        const normalizedKey = originalKey.toLowerCase();
+                        if (!updatedKeys.has(normalizedKey)) {
+                            updatedKeys.set(normalizedKey, originalKey);
+                            newOriginalKeys.add(originalKey);
+                        }
+                    });
+                    
+                    // Auto-select new keys
+                    if (newOriginalKeys.size > 0) {
+                        setCheckedKeys(prevChecked => new Set([...prevChecked, ...newOriginalKeys]));
+                    }
+
                     return updatedKeys;
                 });
             } catch (err: any) {
@@ -84,7 +97,7 @@ const App: React.FC = () => {
 
     const handleSelectAllKeys = () => {
         setIsTableVisible(false);
-        setCheckedKeys(new Set(allKeys));
+        setCheckedKeys(new Set(Array.from(allKeys.values())));
     };
 
     const handleDeselectAllKeys = () => {
@@ -128,7 +141,7 @@ const App: React.FC = () => {
                         {completedFiles.length > 0 ? (
                             <>
                                 <KeySelector 
-                                    allKeys={allKeys} 
+                                    allKeys={Array.from(allKeys.values())} 
                                     checkedKeys={checkedKeys} 
                                     onKeySelectionChange={handleKeySelectionChange}
                                     onSelectAll={handleSelectAllKeys}
