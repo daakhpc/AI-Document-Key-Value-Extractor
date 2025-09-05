@@ -1,6 +1,6 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 export default async function handler(
   req: VercelRequest,
@@ -27,26 +27,19 @@ export default async function handler(
         const ai = new GoogleGenAI({ apiKey: API_KEY });
 
         const prompt = `
-            You are an expert data extraction AI. Your task is to extract structured data from the provided document.
-            The document may contain both document-level fields (e.g., "Invoice Number", "Date") and tabular data (e.g., a list of line items).
-            Your goal is to return a JSON array of objects, where each object represents a single row of data.
+            You are an expert data extraction AI. Your task is to extract all key-value pairs from the provided document.
+            Return a JSON array of objects, where each object has two keys: "key" and "value".
+            - The "key" should be the label or field name found in the document.
+            - The "value" should be the corresponding data for that label.
+            - Consolidate multi-line values into a single string.
+            - If a field has no value, you can omit it.
+            - Order the pairs logically as they appear in the document.
 
-            - If the document contains a table, each row of that table should become one object in the output array.
-            - Any document-level fields that apply to the entire document should be included in *every* object in the array.
-            - If the document is a simple form without a table, return a JSON array containing a *single object* with all the extracted key-value pairs.
-            - The keys in the JSON objects should be the labels found in the document.
-            - Consolidate multi-line values into a single string with spaces.
-            - If the document does not contain clear key-value pairs or tabular data, return an empty array.
-
-            For example, for an invoice with two line items, the output should look like this:
+            Example response format:
             [
-              { "Invoice Number": "123", "Date": "2024-01-01", "Description": "Product A", "Quantity": "2", "Price": "10.00" },
-              { "Invoice Number": "123", "Date": "2024-01-01", "Description": "Product B", "Quantity": "1", "Price": "20.00" }
-            ]
-
-            If the document is a business card, the output should be:
-            [
-              { "Name": "John Doe", "Title": "Software Engineer", "Phone": "555-1234" }
+              { "key": "Invoice Number", "value": "123" },
+              { "key": "Date", "value": "2024-01-01" },
+              { "key": "Name", "value": "John Doe" }
             ]
 
             Return ONLY the JSON array. Do not return any other text, explanations, or markdown formatting.
@@ -66,6 +59,17 @@ export default async function handler(
             },
             config: {
                 responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            key: { type: Type.STRING },
+                            value: { type: Type.STRING }
+                        },
+                        required: ["key", "value"]
+                    }
+                }
             }
         });
         
@@ -77,27 +81,30 @@ export default async function handler(
         const parsedData = JSON.parse(jsonText);
 
         if (!Array.isArray(parsedData)) {
-            return res.status(500).json({ error: "Invalid data format received from AI. Expected an array." });
+            return res.status(500).json({ error: "Invalid data format from AI. Expected an array." });
         }
 
-        const isValid = parsedData.every((item: any) => typeof item === 'object' && item !== null && !Array.isArray(item));
+        // Validate that each item in the array is a KeyValuePair
+        const isValid = parsedData.every((item: any) =>
+            typeof item === 'object' &&
+            item !== null &&
+            !Array.isArray(item) &&
+            'key' in item &&
+            'value' in item &&
+            typeof item.key === 'string'
+        );
+
         if (!isValid) {
-            return res.status(500).json({ error: "Invalid item format in data received from AI. Expected an array of objects." });
+            return res.status(500).json({ error: "Invalid item format in data from AI. Expected {key: string, value: string} objects." });
         }
         
-        // Ensure all values are strings
-        const dataWithStrings = parsedData.map((row: any) => {
-            const newRow: Record<string, string> = {};
-            for (const key in row) {
-                if (Object.prototype.hasOwnProperty.call(row, key)) {
-                    newRow[key] = String(row[key]);
-                }
-            }
-            return newRow;
-        });
+        // Ensure all values are strings, as expected by the frontend
+        const finalData = parsedData.map((item: { key: string; value: any }) => ({
+            key: item.key,
+            value: String(item.value),
+        }));
 
-
-        return res.status(200).json(dataWithStrings);
+        return res.status(200).json(finalData);
 
     } catch (e: any) {
         console.error("Gemini API call failed", e);

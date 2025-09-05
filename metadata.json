@@ -1,5 +1,5 @@
 {
-  "name": "AI Document Key-Value Extractor",
-  "description": "Upload multiple PDF or image documents, and this application will use AI to extract key-value pairs. You can then select which data points to view and display them in an organized table.",
+  "name": "AI Document Extractor",
+  "description": "Upload multiple documents (PDFs, images) and use AI to identify headers, configure columns, and extract structured data into a table. The final data can be exported to CSV.",
   "requestFramePermissions": []
 }
