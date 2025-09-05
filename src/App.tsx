@@ -1,8 +1,7 @@
-// FIX: Add Vite client types to fix import.meta.env errors.
-/// <reference types="vite/client" />
 
+// FIX: Removed the reference to "vite/client" which was causing a "Cannot find type definition file" error.
+// The reference is unnecessary as `import.meta.env` is not used in this project.
 import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { UploadedFile, TableRow, AppStep } from './types';
 import * as geminiService from './services/geminiService';
 import FileUpload from './components/FileUpload';
@@ -11,8 +10,6 @@ import DataTable from './components/DataTable';
 
 // --- Helper & Sub-Components defined in App.tsx to avoid creating new files ---
 
-const API_KEY = import.meta.env.VITE_API_KEY;
-
 const ThemeToggle: React.FC<{ theme: 'light' | 'dark'; toggleTheme: () => void }> = ({ theme, toggleTheme }) => (
     <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label="Toggle theme">
         {theme === 'light' ? 
@@ -20,35 +17,6 @@ const ThemeToggle: React.FC<{ theme: 'light' | 'dark'; toggleTheme: () => void }
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>}
     </button>
 );
-
-const ApiKeyTester: React.FC = () => {
-    const [status, setStatus] = useState<'idle' | 'testing' | 'valid' | 'invalid'>('idle');
-    const testApiKey = async () => {
-        setStatus('testing');
-        if (!API_KEY) {
-            setStatus('invalid');
-            return;
-        }
-        try {
-            const ai = new GoogleGenAI({ apiKey: API_KEY });
-            await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'test' });
-            setStatus('valid');
-        } catch (error) {
-            console.error("API Key test failed:", error);
-            setStatus('invalid');
-        }
-    };
-    return (
-        <div className="flex items-center space-x-2">
-            <button onClick={testApiKey} disabled={status === 'testing'} className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
-                Test API Key
-            </button>
-            {status === 'testing' && <div className="w-4 h-4 border-t-2 border-blue-500 rounded-full animate-spin"></div>}
-            {status === 'valid' && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>}
-            {status === 'invalid' && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>}
-        </div>
-    );
-};
 
 const ProgressBar: React.FC<{ current: number; total: number }> = ({ current, total }) => (
     <div className="w-full">
@@ -194,7 +162,6 @@ const App: React.FC = () => {
                         📄 AI Document Extractor
                     </h1>
                     <div className="flex items-center space-x-4">
-                        <ApiKeyTester />
                         <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
                     </div>
                 </div>
